@@ -1,325 +1,350 @@
 <!DOCTYPE html>
 <html lang="ja">
-<head>
-    <meta charset="utf-8">
+  <head>
+    <meta charset="utf-8" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <style>
-        table {
-            border-collapse: collapse;
-            border: 2px solid rgb(140 140 140);
-            font-family: sans-serif;
-            font-size: 0.8rem;
-            letter-spacing: 1px;
-        }
+      table {
+        border-collapse: collapse;
+        border: 2px solid rgb(140 140 140);
+        font-family: sans-serif;
+        font-size: 0.8rem;
+        letter-spacing: 1px;
+      }
 
-        caption {
-            caption-side: bottom;
-            padding: 10px;
-            font-weight: bold;
-        }
+      caption {
+        caption-side: bottom;
+        padding: 10px;
+        font-weight: bold;
+      }
 
-        thead,
-        tfoot {
-            background-color: rgb(228 240 245);
-        }
+      thead,
+      tfoot {
+        background-color: rgb(228 240 245);
+      }
 
-        th,
-        td {
-            border: 1px solid rgb(160 160 160);
-            padding: 8px 10px;
-        }
+      th,
+      td {
+        border: 1px solid rgb(160 160 160);
+        padding: 8px 10px;
+      }
 
-        /* td:last-of-type {
+      /* td:last-of-type {
           text-align: center;
         } */
-        td.right {
-            text-align: right;
-        }
+      td.right {
+        text-align: right;
+      }
 
-        tbody > tr:nth-of-type(even) {
-            background-color: rgb(237 238 242);
-        }
+      tbody tr.even {
+        background-color: rgb(237 238 242);
+      }
 
-        tfoot th {
-            text-align: right;
-        }
+      tfoot th {
+        text-align: right;
+      }
 
-        tfoot td {
-            font-weight: bold;
-        }
+      tfoot td {
+        font-weight: bold;
+      }
 
-        .canvas {
-            height: 300px;
-        }
+      .canvas {
+        height: 300px;
+      }
     </style>
     <title>TaskChuteCloud2 Review Viewer</title>
-</head>
+  </head>
 
-<body>
-<div>
-    <form>
-        <input accept="text/csv" id="csv" name="csv" type="file"/>
-    </form>
-</div>
-<div>
-    <button id="back" value="back">＜</button>
-    <span id="dateStr"></span>
-    <button id="forward" value="forward">＞</button>
-</div>
-<div class="canvas">
-    <canvas id="myChart"></canvas>
-</div>
-<div class="table" id="table">
-    <table>
+  <body>
+    <div>
+      <form>
+        <input accept="text/csv" id="csv" name="csv" type="file" />
+      </form>
+    </div>
+    <div>
+      <button id="back" value="back">＜</button>
+      <span id="dateStr"></span>
+      <button id="forward" value="forward">＞</button>
+    </div>
+    <div class="canvas">
+      <canvas id="myChart"></canvas>
+    </div>
+    <div class="table" id="table">
+      <table>
         <thead>
-        <tr>
+          <tr>
             <th>日付</th>
             <th>プロジェクト</th>
-            <th>実績<br/>分</th>
-            <th>実績<br/>時(0.5刻み)</th>
-        </tr>
+            <th>実績<br />分</th>
+            <th>実績<br />時(0.5刻み)</th>
+          </tr>
         </thead>
         <tbody id="tbody"></tbody>
-    </table>
-</div>
+      </table>
+    </div>
 
-<script type="module">
-    const csvFiles = document.getElementById("csv");
-    csvFiles.addEventListener("input", function (e) {
+    <script type="module">
+      const csvFiles = document.getElementById("csv");
+      csvFiles.addEventListener("input", function (e) {
         Promise.resolve()
-            .then(readCSV.bind(null, e.target.files[0]))
-            .then(totalling)
-            .then(outputTR)
-            .then(getOneDay)
-            .then(draw)
-            .catch((error) => console.log(error.message));
-    });
+          .then(readCSV.bind(null, e.target.files[0]))
+          .then(totalling)
+          .then(outputTR)
+          .then(getOneDay)
+          .then(draw)
+          .catch((error) => console.log(error.message));
+      });
 
-    const back = document.getElementById("back");
-    back.addEventListener("click", function (e) {
+      const back = document.getElementById("back");
+      back.addEventListener("click", function (e) {
         let targetDate = document.getElementById("dateStr");
         targetDate.innerText = decrementDateStr(targetDate.innerText);
 
         // グラフに再設定
         Promise.resolve()
-            .then(getOneDay.bind(null, targetDate.innerText))
-            .then(redraw)
-            .catch((error) => console.log(error.message));
-    });
+          .then(getOneDay.bind(null, targetDate.innerText))
+          .then(redraw)
+          .catch((error) => console.log(error.message));
+      });
 
-    const forward = document.getElementById("forward");
-    forward.addEventListener("click", function (e) {
+      const forward = document.getElementById("forward");
+      forward.addEventListener("click", function (e) {
         let targetDate = document.getElementById("dateStr");
         targetDate.innerText = incrementDateStr(targetDate.innerText);
         // グラフに再設定
         Promise.resolve()
-            .then(getOneDay.bind(null, targetDate.innerText))
-            .then(redraw)
-            .catch((error) => console.log(error.message));
-    });
+          .then(getOneDay.bind(null, targetDate.innerText))
+          .then(redraw)
+          .catch((error) => console.log(error.message));
+      });
 
-    // CSVをパース
-    function readCSV(file) {
+      // CSVをパース
+      function readCSV(file) {
         return new Promise((resolve, reject) => {
-            Papa.parse(file, {
-                complete: function (results) {
-                    // 空行は削除する
-                    const data = results.data.filter((value) => {
-                        return value.length > 1;
-                    });
-                    resolve(data);
-                },
+          Papa.parse(file, {
+            complete: function (results) {
+              // 空行は削除する
+              const data = results.data.filter((value) => {
+                return value.length > 1;
+              });
+              resolve(data);
+            },
+          });
+        });
+      }
+
+      // 日毎、プロジェクト毎にデータを集計する
+      function totalling(data) {
+        return new Promise((resolve, reject) => {
+          const totallingData = [];
+
+          for (let i = 0; i < data.length; i++) {
+            let target = totallingData.find((value) => {
+              if (value.date == data[i][0] && value.project == data[i][4]) {
+                return true;
+              }
             });
-        });
-    }
-
-    // 日毎、プロジェクト毎にデータを集計する
-    function totalling(data) {
-        return new Promise((resolve, reject) => {
-            const totallingData = [];
-
-            for (let i = 0; i < data.length; i++) {
-                let target = totallingData.find((value) => {
-                    if (value.date == data[i][0] && value.project == data[i][4]) {
-                        return true;
-                    }
-                });
-                if (target) {
-                    target.time += strToTime(data[i][12]);
-                } else {
-                    target = {
-                        date: data[i][0],
-                        project: data[i][4],
-                        time: strToTime(data[i][12]),
-                        roundTime: 0,
-                    };
-                    totallingData.push(target);
-                }
+            if (target) {
+              target.time += strToTime(data[i][12]);
+            } else {
+              target = {
+                date: data[i][0],
+                project: data[i][4],
+                time: strToTime(data[i][12]),
+                roundTime: 0,
+              };
+              totallingData.push(target);
             }
+          }
 
-            for (let i = 0; i < totallingData.length; i++) {
-                totallingData[i].roundTime = halfRound(totallingData[i].time);
-            }
+          for (let i = 0; i < totallingData.length; i++) {
+            totallingData[i].roundTime = halfRound(totallingData[i].time);
+          }
 
-            console.log(totallingData);
-            totallingData.sort((a, b) => (a.date > b.date ? 1 : -1));
+          totallingData.sort((a, b) => (a.date > b.date ? 1 : -1));
 
-            sessionStorage.setItem(
-                "totallingData",
-                JSON.stringify(totallingData)
-            );
+          sessionStorage.setItem(
+            "totallingData",
+            JSON.stringify(totallingData)
+          );
 
-            resolve();
+          resolve();
         });
-    }
+      }
 
-    // 0.5刻みの数値を計算する
-    function halfRound(value) {
+      // 0.5刻みの数値を計算する
+      function halfRound(value) {
         let tmp = Math.round((value / 60 / 60) * 10) / 10;
         const integer = Math.floor(tmp);
         const fraction = tmp - integer;
         if (fraction < 0.25) {
-            tmp = integer;
+          tmp = integer;
         } else if (fraction >= 0.25 && fraction < 0.75) {
-            tmp = integer + 0.5;
+          tmp = integer + 0.5;
         } else {
-            tmp = integer + 1;
+          tmp = integer + 1;
         }
         return tmp;
-    }
+      }
 
-    // テーブル要素作成
-    function outputTR() {
+      // テーブル要素作成
+      function outputTR() {
         return new Promise((resolve, reject) => {
-            const tbl = document.getElementById("table");
-            const tblBody = document.getElementById("tbody");
-            const totallingData = JSON.parse(sessionStorage.getItem("totallingData"));
+          const tbl = document.getElementById("table");
+          const tblBody = document.getElementById("tbody");
+          const totallingData = JSON.parse(
+            sessionStorage.getItem("totallingData")
+          );
+          let trBgStatus = false;
+          let previousDate = "";
 
-            for (let i in totallingData) {
-                if (totallingData[i].date == "タイムライン日付") continue;
-                // 0時間を弾く場合は下記を有効に
-                if (totallingData[i].roundTime == 0) continue;
+          for (let i in totallingData) {
+            if (totallingData[i].date == "タイムライン日付") continue;
+            // 0時間を弾く場合は下記を有効に
+            if (totallingData[i].roundTime == 0) continue;
 
-                const row = document.createElement("tr");
+            const row = document.createElement("tr");
 
-                // 日付
-                let cell = document.createElement("td");
-                let cellText = document.createTextNode(totallingData[i].date);
-                cell.appendChild(cellText);
-                row.appendChild(cell);
+            // 日付
+            let cell = document.createElement("td");
+            let cellText = document.createTextNode(totallingData[i].date);
+            cell.appendChild(cellText);
+            row.appendChild(cell);
 
-                // プロジェクト名
-                cell = document.createElement("td");
-                cellText = document.createTextNode(totallingData[i].project);
-                cell.appendChild(cellText);
-                row.appendChild(cell);
+            // プロジェクト名
+            cell = document.createElement("td");
+            cellText = document.createTextNode(totallingData[i].project);
+            cell.appendChild(cellText);
+            row.appendChild(cell);
 
-                cell = document.createElement("td");
-                cellText = document.createTextNode(
-                    Math.floor(totallingData[i].time / 60)
-                );
-                cell.appendChild(cellText);
-                cell.classList.add("right");
-                row.appendChild(cell);
+            cell = document.createElement("td");
+            cellText = document.createTextNode(
+              Math.floor(totallingData[i].time / 60)
+            );
+            cell.appendChild(cellText);
+            cell.classList.add("right");
+            row.appendChild(cell);
 
-                cell = document.createElement("td");
-                cellText = document.createTextNode(totallingData[i].roundTime);
-                cell.appendChild(cellText);
-                cell.classList.add("right");
-                row.appendChild(cell);
+            cell = document.createElement("td");
+            cellText = document.createTextNode(totallingData[i].roundTime);
+            cell.appendChild(cellText);
+            cell.classList.add("right");
+            row.appendChild(cell);
 
-                tblBody.appendChild(row);
+            if (previousDate !== totallingData[i].date) {
+              previousDate = totallingData[i].date;
+              trBgStatus = !trBgStatus;
+            }
+            if (!trBgStatus) {
+              row.classList.add("even");
             }
 
-            resolve();
-        });
-    }
+            tblBody.appendChild(row);
+          }
 
-    function strToTime(timeStr) {
+          resolve();
+        });
+      }
+
+      function strToTime(timeStr) {
         const [hours, minutes, seconds] = timeStr.split(":");
         return Number(hours) * 60 * 60 + Number(minutes) * 60 + Number(seconds);
-    }
+      }
 
-    // 1日分だけ取得する
-    function getOneDay() {
+      // 1日分だけ取得する
+      function getOneDay() {
         return new Promise((resolve, reject) => {
-            const totallingData = JSON.parse(sessionStorage.getItem("totallingData"));
-            let dateStr = document.getElementById("dateStr").innerText;
-            if (dateStr === '') {
-                // 最初の1日分を取る
-                dateStr = totallingData[0].date;
-            }
-            let result = totallingData.filter((value) => value.date == dateStr);
-            if (result.length === 0) {
-                result = [{"date": dateStr}];
-            }
-            resolve(result);
+          const totallingData = JSON.parse(
+            sessionStorage.getItem("totallingData")
+          );
+          let dateStr = document.getElementById("dateStr").innerText;
+          if (dateStr === "") {
+            // 最初の1日分を取る
+            dateStr = totallingData[0].date;
+          }
+          let result = totallingData.filter((value) => value.date == dateStr);
+          if (result.length === 0) {
+            result = [{ date: dateStr }];
+          }
+          resolve(result);
         });
-    }
+      }
 
-    function draw(data) {
+      function draw(data) {
         return new Promise((resolve, reject) => {
-            const ctx = document.getElementById("myChart");
-            const labels = data.map((value) => value.project);
-            const datasets = data.map((value) => value.roundTime);
+          const ctx = document.getElementById("myChart");
+          const labels = data.map((value) => value.project);
+          const datasets = data.map((value) => value.roundTime);
 
-            window.myChart = new Chart(ctx, {
-                type: "bar",
-                plugins: [ChartDataLabels],
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: data[0].date,
-                            data: datasets,
-                            borderWidth: 1,
-                        },
-                    ],
+          window.myChart = new Chart(ctx, {
+            type: "bar",
+            plugins: [ChartDataLabels],
+            data: {
+              labels: labels,
+              datasets: [
+                {
+                  label: data[0].date,
+                  data: datasets,
+                  borderWidth: 1,
                 },
-                options: {
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                        },
-                    },
-                    maxHeight: 300,
+              ],
+            },
+            options: {
+              scales: {
+                y: {
+                  beginAtZero: true,
                 },
-            });
+              },
+              maxHeight: 300,
+            },
+          });
 
-            let span = document.getElementById("dateStr");
-            span.textContent = data[0].date;
-            resolve();
+          let span = document.getElementById("dateStr");
+          span.textContent = data[0].date;
+          resolve();
         });
-    }
+      }
 
-    function redraw(data) {
+      function redraw(data) {
         return new Promise((resolve, reject) => {
-            const labels = data.map((value) => value.project);
-            const datasets = data.map((value) => value.roundTime);
+          const labels = data.map((value) => value.project);
+          const datasets = data.map((value) => value.roundTime);
 
-            myChart.data.labels = labels;
-            myChart.data.datasets[0].data = datasets;
-            myChart.data.datasets[0].label = data[0].date;
-            myChart.update();
-            resolve();
+          myChart.data.labels = labels;
+          myChart.data.datasets[0].data = datasets;
+          myChart.data.datasets[0].label = data[0].date;
+          myChart.update();
+          resolve();
         });
-    }
+      }
 
-    function incrementDateStr(dateStr) {
+      function incrementDateStr(dateStr) {
         const dateArr = dateStr.split("-");
         const date = new Date(dateArr[0], dateArr[1] - 1, dateArr[2]);
         date.setDate(date.getDate() + 1);
-        return date.getFullYear() + "-" + (date.getMonth() + 1).toString().padStart(2, "0") + "-" + date.getDate().toString().padStart(2, "0");
-    }
+        return (
+          date.getFullYear() +
+          "-" +
+          (date.getMonth() + 1).toString().padStart(2, "0") +
+          "-" +
+          date.getDate().toString().padStart(2, "0")
+        );
+      }
 
-    function decrementDateStr(dateStr) {
+      function decrementDateStr(dateStr) {
         const dateArr = dateStr.split("-");
         const date = new Date(dateArr[0], dateArr[1] - 1, dateArr[2]);
         date.setDate(date.getDate() - 1);
-        return date.getFullYear() + "-" + (date.getMonth() + 1).toString().padStart(2, "0") + "-" + date.getDate().toString().padStart(2, "0");
-    }
-</script>
-</body>
+        return (
+          date.getFullYear() +
+          "-" +
+          (date.getMonth() + 1).toString().padStart(2, "0") +
+          "-" +
+          date.getDate().toString().padStart(2, "0")
+        );
+      }
+    </script>
+  </body>
 </html>
